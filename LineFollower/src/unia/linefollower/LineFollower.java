@@ -1,75 +1,83 @@
 package unia.linefollower;
 
-import lejos.nxt.*;
-import lejos.robotics.RegulatedMotor;
+import lejos.nxt.LCD;
+import lejos.nxt.Motor;
 import lejos.robotics.navigation.DifferentialPilot;
-import static unia.linefollower.MainRoutine.*;
 
-public class LineFollower {
-	
-	private TouchSensor touchS;
+public class LineFollower implements Runnable {
+
 	private DifferentialPilot pilot;
-	private ColorSensor sensor;
+	private SensorArmRunnable sar;
 
-	private RegulatedMotor sensorMotor;
-	
-	private int barrier = 350;
-	private float minSpeed = 0;
-	private float maxSpeed = 1000;
-	private int black = 250;
-	private int white = 400;
-	
-	private int counter = 0;
-	
-	public LineFollower(){
-		
-//		touchS = new TouchSensor(SensorPort.S1);
-		pilot= new DifferentialPilot(2.25f, 5.5f, Motor.A, Motor.B);
-		sensor = new ColorSensor(SensorPort.S1);
-		sensorMotor = Motor.C;
+	public LineFollower() {
+		this(null);
 	}
-	
-	public void run(){
-		initSensorMotor();
-		sensor.setFloodlight(true);
 
-		while(true){
-			double travSpeed = 0;
-			if(sensor.getRawLightValue() <= black)
-				travSpeed = maxSpeed;
-			else if(sensor.getRawLightValue() >= white)
-				travSpeed = minSpeed;
-			else
-				travSpeed = maxSpeed * ((sensor.getRawLightValue() - black)/ (white- black));	
+	public LineFollower(SensorArmRunnable sar) {
+		this.sar = sar;
+		pilot = new DifferentialPilot(44.2f, 145f, Motor.B, Motor.A, true);
+	}
 
-			LCD.drawString(String.valueOf(sensor.getRawLightValue()) + " /n " + counter++, 2, 2);
-
-			// pilot.setTravelSpeed(travSpeed);
-			
-			//debugInfo("" + sensorMotor.getTachoCount());
-			// pilot.arc(15, sensorMotor.getTachoCount());
-//			//pilot.forward();
+	@Override
+	public void run() {
+		while (true) {
+			step();
 		}
 	}
 	
-	/**
-	 * Setzt den Sensor-Arm auf die Mitte.
-	 */
-	private void initSensorMotor() {
-		sensorMotor.setSpeed(100);
-		sensorMotor.rotateTo(85, true);
+	// from JRE Math.class
+	private static final float _DEG_TO_RAD = 0.0174532925199432957692369076849f; 
+	private static float degToRadians(double degree) {
+		return (float)(degree * _DEG_TO_RAD);
+	}
+	
+	public void step() {
+		pilot.setTravelSpeed(10);
+
+		int nextAngle = sar.getNextAngle();
+		int armLength = (int) sar.getArmLength();
+		int travDist = (int) sar.getNextDistance();
+		int radius = 0, angle = 0;
+
+		pilot.setTravelSpeed(120);
+		if (nextAngle == 0) {
+			pilot.travel(travDist, true);
+		} else {
+			// working around missing or buggy Math.class...
+			int absAngle = nextAngle;
+			if (nextAngle < 0) {
+				absAngle = nextAngle * -1;
+			}
+			
+			radius = (int) ((armLength / 2) / Math.cos(degToRadians(90. - absAngle)));
+			angle = travDist;
+			if (nextAngle < 0) {
+				angle = 0 - angle;
+				radius = 0 - radius;
+			}
+			pilot.arc(0.6 * radius, angle);
+		}
+
+		LCD.drawString("arcRadius: " + radius, 0, 6);
+		LCD.drawString("arcAngle: " + angle, 0, 7);
+	}
+
+	public void start() {
+		new Thread(this).start();
+	}
+
+	public void arcTest() {
+		/*
+		 * pilot.arc(200, 45); // left /
+		 */
+		pilot.arc(-200, -45); // right
+		// */
 		try {
-			Thread.sleep(1000);
+			Thread.sleep(5000);
 		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		sensorMotor.stop();
-		
-		sensorMotor.setSpeed(30);
-		sensorMotor.resetTachoCount();
-		sensorMotor.rotateTo(-45);
-		sensorMotor.resetTachoCount();
 	}
 
 }
-
